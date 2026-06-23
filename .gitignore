@@ -9,6 +9,8 @@ build
 *.db-journal
 logs
 web/default/dist
+web/default/src/i18n/locales/_extras/
+web/default/src/i18n/locales/_reports/
 web/node_modules
 web/dist
 .env
