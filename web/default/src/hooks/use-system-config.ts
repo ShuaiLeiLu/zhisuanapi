@@ -25,7 +25,6 @@ import {
   DEFAULT_CURRENCY_CONFIG,
 } from '@/stores/system-config-store'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
-import { applyFaviconToDom } from '@/lib/dom-utils'
 
 interface UseSystemConfigOptions {
   /** Automatically fetch config from backend (use only in root component) */
@@ -36,7 +35,6 @@ interface StatusApiResponse {
   success: boolean
   data: {
     system_name?: string
-    logo?: string
     footer_html?: string
     demo_site_enabled?: boolean
     display_token_stat_enabled?: boolean
@@ -93,7 +91,7 @@ export function mapStatusDataToConfig(
 
   return {
     systemName: data.system_name || DEFAULT_SYSTEM_NAME,
-    logo: data.logo || DEFAULT_LOGO,
+    logo: DEFAULT_LOGO,
     footerHtml: data.footer_html,
     demoSiteEnabled: data.demo_site_enabled,
     displayTokenStatEnabled: data.display_token_stat_enabled,
@@ -181,7 +179,6 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
       logo,
       () => {
         setLoadedLogoUrl(logo)
-        applyFaviconToDom(logo)
       },
       () => {
         if (logo !== DEFAULT_LOGO) {

@@ -101,10 +101,8 @@ export type SystemTaskResponse<TTask = SystemTask | null> = {
 }
 
 export type SiteSettings = {
-  'theme.frontend': string
   Notice: string
   SystemName: string
-  Logo: string
   Footer: string
   About: string
   HomePageContent: string
