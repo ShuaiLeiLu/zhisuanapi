@@ -12,16 +12,17 @@ import (
 )
 
 type TopUp struct {
-	Id              int     `json:"id"`
-	UserId          int     `json:"user_id" gorm:"index"`
-	Amount          int64   `json:"amount"`
-	Money           float64 `json:"money"`
-	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	CreateTime      int64   `json:"create_time"`
-	CompleteTime    int64   `json:"complete_time"`
-	Status          string  `json:"status"`
+	Id                   int     `json:"id"`
+	UserId               int     `json:"user_id" gorm:"index"`
+	Amount               int64   `json:"amount"`
+	Money                float64 `json:"money"`
+	OriginalPayAmountUSD float64 `json:"original_pay_amount_usd" gorm:"type:decimal(12,6);default:0;column:original_pay_amount_usd"`
+	TradeNo              string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod        string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider      string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	CreateTime           int64   `json:"create_time"`
+	CompleteTime         int64   `json:"complete_time"`
+	Status               string  `json:"status"`
 }
 
 const (
@@ -106,7 +107,7 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	})
 }
 
-func Recharge(referenceId string, customerId string, callerIp string) (err error) {
+func Recharge(referenceId string, customerId string, callerIp string, originalPayAmountUSD float64) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -135,6 +136,11 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if originalPayAmountUSD > 0 {
+			topUp.OriginalPayAmountUSD = originalPayAmountUSD
+		} else if topUp.OriginalPayAmountUSD <= 0 {
+			topUp.OriginalPayAmountUSD = topUp.Money
+		}
 		err = tx.Save(topUp).Error
 		if err != nil {
 			return err
@@ -155,6 +161,9 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
+	if err := AfterTopUpSuccessHook(topUp); err != nil {
+		common.SysError(fmt.Sprintf("stripe topup affiliate rebate failed: trade_no=%s error=%v", topUp.TradeNo, err))
+	}
 
 	return nil
 }
@@ -331,9 +340,10 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	var quotaToAdd int
 	var payMoney float64
 	var paymentMethod string
+	var completed bool
+	topUp := &TopUp{}
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		topUp := &TopUp{}
 		// 行级锁，避免并发补单
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return errors.New("充值订单不存在")
@@ -366,6 +376,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		// 标记完成
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if topUp.OriginalPayAmountUSD <= 0 {
+			topUp.OriginalPayAmountUSD = topUp.Money
+		}
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
@@ -378,6 +391,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
+		completed = true
 		return nil
 	})
 
@@ -385,11 +399,18 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		return err
 	}
 
+	if !completed {
+		return nil
+	}
+
 	// 事务外记录日志，避免阻塞
 	RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
+	if err := AfterTopUpSuccessHook(topUp); err != nil {
+		common.SysError(fmt.Sprintf("manual topup affiliate rebate failed: trade_no=%s error=%v", topUp.TradeNo, err))
+	}
 	return nil
 }
-func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
+func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string, originalPayAmountUSD float64) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -418,6 +439,11 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if originalPayAmountUSD > 0 {
+			topUp.OriginalPayAmountUSD = originalPayAmountUSD
+		} else if topUp.OriginalPayAmountUSD <= 0 {
+			topUp.OriginalPayAmountUSD = topUp.Money
+		}
 		err = tx.Save(topUp).Error
 		if err != nil {
 			return err
@@ -460,6 +486,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodCreem)
+	if err := AfterTopUpSuccessHook(topUp); err != nil {
+		common.SysError(fmt.Sprintf("creem topup affiliate rebate failed: trade_no=%s error=%v", topUp.TradeNo, err))
+	}
 
 	return nil
 }
@@ -504,6 +533,9 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if topUp.OriginalPayAmountUSD <= 0 {
+			topUp.OriginalPayAmountUSD = topUp.Money
+		}
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
@@ -522,6 +554,9 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("Waffo充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodWaffo)
+		if err := AfterTopUpSuccessHook(topUp); err != nil {
+			common.SysError(fmt.Sprintf("waffo topup affiliate rebate failed: trade_no=%s error=%v", topUp.TradeNo, err))
+		}
 	}
 
 	return nil
@@ -565,6 +600,9 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if topUp.OriginalPayAmountUSD <= 0 {
+			topUp.OriginalPayAmountUSD = topUp.Money
+		}
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
@@ -583,6 +621,9 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 	if quotaToAdd > 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("Waffo Pancake充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
+		if err := AfterTopUpSuccessHook(topUp); err != nil {
+			common.SysError(fmt.Sprintf("waffo pancake topup affiliate rebate failed: trade_no=%s error=%v", topUp.TradeNo, err))
+		}
 	}
 
 	return nil

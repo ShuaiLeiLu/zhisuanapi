@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatQuota, formatCompactNumber } from '@/lib/format'
 import { Label } from '@/components/ui/label'
 import { Dialog } from '@/components/dialog'
@@ -136,6 +137,8 @@ export function UserInfoDialog({
           {/* Invitation Info */}
           {(userInfo.aff_code ||
             userInfo.aff_count !== undefined ||
+            (userInfo.aff_quota_amount !== undefined &&
+              userInfo.aff_quota_amount > 0) ||
             (userInfo.aff_quota !== undefined && userInfo.aff_quota > 0)) && (
             <>
               <div className='grid grid-cols-2 gap-4'>
@@ -151,14 +154,26 @@ export function UserInfoDialog({
                     value={formatCompactNumber(userInfo.aff_count)}
                   />
                 )}
+                {userInfo.aff_rebate_count !== undefined && (
+                  <InfoItem
+                    label={t('Rebate Count')}
+                    value={formatCompactNumber(userInfo.aff_rebate_count)}
+                  />
+                )}
               </div>
 
-              {userInfo.aff_quota !== undefined && userInfo.aff_quota > 0 && (
+              {(userInfo.aff_quota_amount !== undefined &&
+                userInfo.aff_quota_amount > 0) ||
+              (userInfo.aff_quota !== undefined && userInfo.aff_quota > 0) ? (
                 <InfoItem
-                  label={t('Invitation Quota')}
-                  value={formatQuota(userInfo.aff_quota)}
+                  label={t('Pending Reward Amount')}
+                  value={
+                    userInfo.aff_quota_amount !== undefined
+                      ? formatBillingCurrencyFromUSD(userInfo.aff_quota_amount)
+                      : formatQuota(userInfo.aff_quota ?? 0)
+                  }
                 />
-              )}
+              ) : null}
             </>
           )}
 

@@ -47,6 +47,8 @@ export interface UserProfile {
   group: string
   /** Current quota balance */
   quota: number
+  /** Current balance amount in USD */
+  quota_amount?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -61,8 +63,14 @@ export interface UserProfile {
   aff_count: number
   /** Affiliate quota (pending rewards) */
   aff_quota: number
+  /** Affiliate pending reward amount in USD */
+  aff_quota_amount?: number
   /** Total affiliate quota earned (historical) */
   aff_history_quota: number
+  /** Total affiliate reward amount earned in USD */
+  aff_history_quota_amount?: number
+  /** Number of successful top-up rebates */
+  aff_rebate_count?: number
   /** Invite user ID */
   invite_user_id?: number
   /** Account creation timestamp */
@@ -197,6 +205,8 @@ export interface CheckinRecord {
   checkin_date: string
   /** Quota awarded for this check-in */
   quota_awarded: number
+  /** USD amount awarded for this check-in */
+  quota_awarded_amount?: number
 }
 
 /**
@@ -209,6 +219,8 @@ export interface CheckinStats {
   total_checkins: number
   /** Total quota earned from check-ins */
   total_quota: number
+  /** Total USD amount earned from check-ins */
+  total_quota_amount?: number
   /** Current month check-in count */
   checkin_count: number
   /** Check-in records for the queried month */
@@ -231,4 +243,6 @@ export interface CheckinStatusResponse {
 export interface CheckinResponse {
   /** Quota awarded for this check-in */
   quota_awarded: number
+  /** USD amount awarded for this check-in */
+  quota_awarded_amount?: number
 }

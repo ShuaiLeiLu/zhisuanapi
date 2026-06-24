@@ -42,6 +42,75 @@ func isPositiveOptionValue(value string) bool {
 	return err == nil && floatValue > 0
 }
 
+func isNonNegativeOptionValue(value string) bool {
+	floatValue, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	return err == nil && floatValue >= 0
+}
+
+func validateCheckinAmountOption(key string, value string) bool {
+	amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || amount < 0 {
+		return false
+	}
+
+	currentMin, currentMax := operation_setting.GetCheckinSetting().GetAmountRange()
+	switch key {
+	case "checkin_setting.min_amount":
+		return amount <= currentMax
+	case "checkin_setting.max_amount":
+		return amount >= currentMin
+	default:
+		return true
+	}
+}
+
+func billingCompatibilityOptionBulkUpdates(key string, value string) map[string]string {
+	updates := map[string]string{key: value}
+	switch key {
+	case "QuotaForInviter":
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil {
+			updates["quota_setting.inviter_registration_reward_amount"] = strconv.FormatFloat(common.QuotaToAmount(quota), 'f', -1, 64)
+		}
+	case "QuotaForInvitee":
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil {
+			updates["quota_setting.invitee_registration_reward_amount"] = strconv.FormatFloat(common.QuotaToAmount(quota), 'f', -1, 64)
+		}
+	case "quota_setting.inviter_registration_reward_amount":
+		amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			updates["QuotaForInviter"] = strconv.Itoa(common.AmountToQuota(amount))
+		}
+	case "quota_setting.invitee_registration_reward_amount":
+		amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			updates["QuotaForInvitee"] = strconv.Itoa(common.AmountToQuota(amount))
+		}
+	case "checkin_setting.min_quota":
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil {
+			updates["checkin_setting.min_amount"] = strconv.FormatFloat(common.QuotaToAmount(quota), 'f', -1, 64)
+		}
+	case "checkin_setting.max_quota":
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil {
+			updates["checkin_setting.max_amount"] = strconv.FormatFloat(common.QuotaToAmount(quota), 'f', -1, 64)
+		}
+	case "checkin_setting.min_amount":
+		amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			updates["checkin_setting.min_quota"] = strconv.Itoa(common.AmountToQuota(amount))
+		}
+	case "checkin_setting.max_amount":
+		amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			updates["checkin_setting.max_quota"] = strconv.Itoa(common.AmountToQuota(amount))
+		}
+	}
+	return updates
+}
+
 func collectModelNamesFromOptionValue(raw string, modelNames map[string]struct{}) {
 	if strings.TrimSpace(raw) == "" {
 		return
@@ -150,6 +219,30 @@ func UpdateOption(c *gin.Context) {
 	case "QuotaForInviter", "QuotaForInvitee":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
 			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
+			return
+		}
+	case "quota_setting.affiliate_reward_trigger":
+		if operation_setting.NormalizeAffiliateRewardTrigger(option.Value.(string)) != option.Value.(string) {
+			common.ApiErrorMsg(c, "邀请奖励触发模式无效")
+			return
+		}
+	case "quota_setting.inviter_registration_reward_amount", "quota_setting.invitee_registration_reward_amount",
+		"quota_setting.inviter_topup_rebate_percent", "quota_setting.invitee_topup_rebate_percent":
+		if !isNonNegativeOptionValue(option.Value.(string)) {
+			common.ApiErrorMsg(c, "邀请奖励金额或百分比不能为负数")
+			return
+		}
+		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
+			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
+			return
+		}
+	case "checkin_setting.min_amount", "checkin_setting.max_amount":
+		if !isNonNegativeOptionValue(option.Value.(string)) {
+			common.ApiErrorMsg(c, "签到奖励金额不能为负数")
+			return
+		}
+		if !validateCheckinAmountOption(option.Key, option.Value.(string)) {
+			common.ApiErrorMsg(c, "签到最大奖励金额不能小于最小奖励金额")
 			return
 		}
 	default:
@@ -333,7 +426,12 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
-	err = model.UpdateOption(option.Key, option.Value.(string))
+	updates := billingCompatibilityOptionBulkUpdates(option.Key, option.Value.(string))
+	if len(updates) > 1 {
+		err = model.UpdateOptionsBulk(updates)
+	} else {
+		err = model.UpdateOption(option.Key, option.Value.(string))
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return

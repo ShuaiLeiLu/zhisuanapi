@@ -12,17 +12,19 @@ import (
 
 // Checkin 签到记录
 type Checkin struct {
-	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId       int    `json:"user_id" gorm:"not null;uniqueIndex:idx_user_checkin_date"`
-	CheckinDate  string `json:"checkin_date" gorm:"type:varchar(10);not null;uniqueIndex:idx_user_checkin_date"` // 格式: YYYY-MM-DD
-	QuotaAwarded int    `json:"quota_awarded" gorm:"not null"`
-	CreatedAt    int64  `json:"created_at" gorm:"bigint"`
+	Id                 int     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId             int     `json:"user_id" gorm:"not null;uniqueIndex:idx_user_checkin_date"`
+	CheckinDate        string  `json:"checkin_date" gorm:"type:varchar(10);not null;uniqueIndex:idx_user_checkin_date"` // 格式: YYYY-MM-DD
+	QuotaAwarded       int     `json:"quota_awarded" gorm:"not null"`
+	QuotaAwardedAmount float64 `json:"quota_awarded_amount" gorm:"-"`
+	CreatedAt          int64   `json:"created_at" gorm:"bigint"`
 }
 
 // CheckinRecord 用于API返回的签到记录（不包含敏感字段）
 type CheckinRecord struct {
-	CheckinDate  string `json:"checkin_date"`
-	QuotaAwarded int    `json:"quota_awarded"`
+	CheckinDate        string  `json:"checkin_date"`
+	QuotaAwarded       int     `json:"quota_awarded"`
+	QuotaAwardedAmount float64 `json:"quota_awarded_amount"`
 }
 
 func (Checkin) TableName() string {
@@ -49,6 +51,23 @@ func HasCheckedInToday(userId int) (bool, error) {
 	return count > 0, err
 }
 
+func randomCheckinRewardQuota(setting *operation_setting.CheckinSetting) int {
+	if setting.MinAmount > 0 || setting.MaxAmount > 0 {
+		minAmount, maxAmount := setting.GetAmountRange()
+		amount := minAmount
+		if maxAmount > minAmount {
+			amount = minAmount + rand.Float64()*(maxAmount-minAmount)
+		}
+		return common.AmountToQuota(amount)
+	}
+
+	minQuota, maxQuota := setting.GetQuotaRange()
+	if maxQuota > minQuota {
+		return minQuota + rand.Intn(maxQuota-minQuota+1)
+	}
+	return minQuota
+}
+
 // UserCheckin 执行用户签到
 // MySQL 和 PostgreSQL 使用事务保证原子性
 // SQLite 不支持嵌套事务，使用顺序操作 + 手动回滚
@@ -67,11 +86,7 @@ func UserCheckin(userId int) (*Checkin, error) {
 		return nil, errors.New("今日已签到")
 	}
 
-	// 计算随机额度奖励
-	quotaAwarded := setting.MinQuota
-	if setting.MaxQuota > setting.MinQuota {
-		quotaAwarded = setting.MinQuota + rand.Intn(setting.MaxQuota-setting.MinQuota+1)
-	}
+	quotaAwarded := randomCheckinRewardQuota(setting)
 
 	today := time.Now().Format("2006-01-02")
 	checkin := &Checkin{
@@ -118,6 +133,7 @@ func userCheckinWithTransaction(checkin *Checkin, userId int, quotaAwarded int) 
 		_ = cacheIncrUserQuota(userId, int64(quotaAwarded))
 	}()
 
+	checkin.QuotaAwardedAmount = common.QuotaToAmount(checkin.QuotaAwarded)
 	return checkin, nil
 }
 
@@ -137,6 +153,7 @@ func userCheckinWithoutTransaction(checkin *Checkin, userId int, quotaAwarded in
 		return nil, errors.New("签到失败：更新额度出错")
 	}
 
+	checkin.QuotaAwardedAmount = common.QuotaToAmount(checkin.QuotaAwarded)
 	return checkin, nil
 }
 
@@ -155,8 +172,9 @@ func GetUserCheckinStats(userId int, month string) (map[string]interface{}, erro
 	checkinRecords := make([]CheckinRecord, len(records))
 	for i, r := range records {
 		checkinRecords[i] = CheckinRecord{
-			CheckinDate:  r.CheckinDate,
-			QuotaAwarded: r.QuotaAwarded,
+			CheckinDate:        r.CheckinDate,
+			QuotaAwarded:       r.QuotaAwarded,
+			QuotaAwardedAmount: common.QuotaToAmount(r.QuotaAwarded),
 		}
 	}
 
@@ -170,10 +188,11 @@ func GetUserCheckinStats(userId int, month string) (map[string]interface{}, erro
 	DB.Model(&Checkin{}).Where("user_id = ?", userId).Select("COALESCE(SUM(quota_awarded), 0)").Scan(&totalQuota)
 
 	return map[string]interface{}{
-		"total_quota":      totalQuota,      // 所有时间累计获得的额度
-		"total_checkins":   totalCheckins,   // 所有时间累计签到次数
-		"checkin_count":    len(records),    // 本月签到次数
-		"checked_in_today": hasCheckedToday, // 今天是否已签到
-		"records":          checkinRecords,  // 本月签到记录详情（不含id和user_id）
+		"total_quota":        totalQuota,                            // 所有时间累计获得的额度
+		"total_quota_amount": common.QuotaToAmount(int(totalQuota)), // 所有时间累计获得的金额
+		"total_checkins":     totalCheckins,                         // 所有时间累计签到次数
+		"checkin_count":      len(records),                          // 本月签到次数
+		"checked_in_today":   hasCheckedToday,                       // 今天是否已签到
+		"records":            checkinRecords,                        // 本月签到记录详情（不含id和user_id）
 	}, nil
 }

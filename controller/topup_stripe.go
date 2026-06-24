@@ -100,14 +100,15 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          req.Amount,
-		Money:           chargedMoney,
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodStripe,
-		PaymentProvider: model.PaymentProviderStripe,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               req.Amount,
+		Money:                chargedMoney,
+		OriginalPayAmountUSD: getStripePayMoney(float64(req.Amount), user.Group),
+		TradeNo:              referenceId,
+		PaymentMethod:        model.PaymentMethodStripe,
+		PaymentProvider:      model.PaymentProviderStripe,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -126,7 +127,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 func RequestStripeAmount(c *gin.Context) {
 	var req StripePayRequest
-	err := c.ShouldBindJSON(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
@@ -136,7 +137,7 @@ func RequestStripeAmount(c *gin.Context) {
 
 func RequestStripePay(c *gin.Context) {
 	var req StripePayRequest
-	err := c.ShouldBindJSON(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
@@ -278,7 +279,8 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 		return
 	}
 
-	err := model.Recharge(referenceId, customerId, callerIp)
+	originalPayAmountUSD := stripeEventOriginalPayAmountUSD(event)
+	err := model.Recharge(referenceId, customerId, callerIp, originalPayAmountUSD)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return
@@ -287,6 +289,14 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 	total, _ := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
 	currency := strings.ToUpper(event.GetObjectValue("currency"))
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值成功 trade_no=%s amount_total=%.2f currency=%s event_type=%s client_ip=%s", referenceId, total/100, currency, string(event.Type), callerIp))
+}
+
+func stripeEventOriginalPayAmountUSD(event stripe.Event) float64 {
+	total, err := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
+	if err != nil || total <= 0 {
+		return 0
+	}
+	return total / 100
 }
 
 func sessionExpired(ctx context.Context, event stripe.Event) {

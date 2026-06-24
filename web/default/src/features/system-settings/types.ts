@@ -244,6 +244,14 @@ export type BillingSettings = {
   TopUpLink: string
   'general_setting.docs_link': string
   'quota_setting.enable_free_model_pre_consume': boolean
+  'quota_setting.affiliate_reward_trigger':
+    | 'registration'
+    | 'first_topup'
+    | 'every_topup'
+  'quota_setting.inviter_registration_reward_amount': number
+  'quota_setting.invitee_registration_reward_amount': number
+  'quota_setting.inviter_topup_rebate_percent': number
+  'quota_setting.invitee_topup_rebate_percent': number
   QuotaPerUnit: number
   USDExchangeRate: number
   'general_setting.quota_display_type': string
@@ -319,6 +327,8 @@ export type BillingSettings = {
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number
+  'checkin_setting.min_amount': number
+  'checkin_setting.max_amount': number
 }
 
 export type OperationsSettings = {

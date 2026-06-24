@@ -59,8 +59,6 @@ const BILLING_SECTIONS = [
         defaultValues={{
           QuotaForNewUser: settings.QuotaForNewUser,
           PreConsumedQuota: settings.PreConsumedQuota,
-          QuotaForInviter: settings.QuotaForInviter,
-          QuotaForInvitee: settings.QuotaForInvitee,
           TopUpLink: settings.TopUpLink,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],
@@ -68,6 +66,16 @@ const BILLING_SECTIONS = [
           quota_setting: {
             enable_free_model_pre_consume:
               settings['quota_setting.enable_free_model_pre_consume'],
+            affiliate_reward_trigger:
+              settings['quota_setting.affiliate_reward_trigger'],
+            inviter_registration_reward_amount:
+              settings['quota_setting.inviter_registration_reward_amount'],
+            invitee_registration_reward_amount:
+              settings['quota_setting.invitee_registration_reward_amount'],
+            inviter_topup_rebate_percent:
+              settings['quota_setting.inviter_topup_rebate_percent'],
+            invitee_topup_rebate_percent:
+              settings['quota_setting.invitee_topup_rebate_percent'],
           },
         }}
         complianceConfirmed={
@@ -193,8 +201,8 @@ const BILLING_SECTIONS = [
       <CheckinSettingsSection
         defaultValues={{
           enabled: settings['checkin_setting.enabled'],
-          minQuota: settings['checkin_setting.min_quota'],
-          maxQuota: settings['checkin_setting.max_quota'],
+          minAmount: settings['checkin_setting.min_amount'],
+          maxAmount: settings['checkin_setting.max_amount'],
         }}
       />
     ),

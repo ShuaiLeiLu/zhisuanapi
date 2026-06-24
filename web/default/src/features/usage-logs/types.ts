@@ -378,5 +378,9 @@ export interface UserInfo {
   aff_code?: string
   aff_count?: number
   aff_quota?: number
+  aff_quota_amount?: number
+  aff_history_quota?: number
+  aff_history_quota_amount?: number
+  aff_rebate_count?: number
   remark?: string
 }

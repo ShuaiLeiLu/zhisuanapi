@@ -188,7 +188,7 @@ func getMinTopup() int64 {
 
 func RequestEpay(c *gin.Context) {
 	var req EpayRequest
-	err := c.ShouldBindJSON(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
@@ -246,14 +246,15 @@ func RequestEpay(c *gin.Context) {
 		amount = dAmount.Div(dQuotaPerUnit).IntPart()
 	}
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          amount,
-		Money:           payMoney,
-		TradeNo:         tradeNo,
-		PaymentMethod:   req.PaymentMethod,
-		PaymentProvider: model.PaymentProviderEpay,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               amount,
+		Money:                payMoney,
+		OriginalPayAmountUSD: payMoney,
+		TradeNo:              tradeNo,
+		PaymentMethod:        req.PaymentMethod,
+		PaymentProvider:      model.PaymentProviderEpay,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -388,6 +389,9 @@ func EpayNotify(c *gin.Context) {
 				topUp.PaymentMethod = verifyInfo.Type
 			}
 			topUp.Status = common.TopUpStatusSuccess
+			if topUp.OriginalPayAmountUSD <= 0 {
+				topUp.OriginalPayAmountUSD = topUp.Money
+			}
 			err := topUp.Update()
 			if err != nil {
 				logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 更新充值订单失败 trade_no=%s user_id=%d client_ip=%s error=%q topup=%q", topUp.TradeNo, topUp.UserId, c.ClientIP(), err.Error(), common.GetJsonString(topUp)))
@@ -405,6 +409,9 @@ func EpayNotify(c *gin.Context) {
 			}
 			logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 充值成功 trade_no=%s user_id=%d client_ip=%s quota_to_add=%d money=%.2f topup=%q", topUp.TradeNo, topUp.UserId, c.ClientIP(), quotaToAdd, topUp.Money, common.GetJsonString(topUp)))
 			model.RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money), c.ClientIP(), topUp.PaymentMethod, "epay")
+			if err := model.AfterTopUpSuccessHook(topUp); err != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 邀请返利失败 trade_no=%s user_id=%d client_ip=%s error=%q", topUp.TradeNo, topUp.UserId, c.ClientIP(), err.Error()))
+			}
 		}
 	} else {
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 忽略事件 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
@@ -413,7 +420,7 @@ func EpayNotify(c *gin.Context) {
 
 func RequestAmount(c *gin.Context) {
 	var req AmountRequest
-	err := c.ShouldBindJSON(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
@@ -494,7 +501,7 @@ type AdminCompleteTopupRequest struct {
 // AdminCompleteTopUp 管理员补单接口
 func AdminCompleteTopUp(c *gin.Context) {
 	var req AdminCompleteTopupRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.TradeNo == "" {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || req.TradeNo == "" {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}

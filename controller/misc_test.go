@@ -8,7 +8,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,4 +87,23 @@ func TestUpdateOptionRejectsRemovedLogoOption(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
 	require.False(t, body.Success)
 	require.Contains(t, body.Message, "Logo")
+}
+
+func TestValidateCheckinAmountOptionRejectsInvalidRange(t *testing.T) {
+	setting := operation_setting.GetCheckinSetting()
+	original := *setting
+	t.Cleanup(func() {
+		*setting = original
+	})
+
+	setting.MinAmount = 1
+	setting.MaxAmount = 3
+	setting.MinQuota = 0
+	setting.MaxQuota = 0
+
+	assert.True(t, validateCheckinAmountOption("checkin_setting.min_amount", "2"))
+	assert.True(t, validateCheckinAmountOption("checkin_setting.max_amount", "2"))
+	assert.False(t, validateCheckinAmountOption("checkin_setting.min_amount", "4"))
+	assert.False(t, validateCheckinAmountOption("checkin_setting.max_amount", "0.5"))
+	assert.False(t, validateCheckinAmountOption("checkin_setting.min_amount", "-1"))
 }

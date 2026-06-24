@@ -28,7 +28,11 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { formatQuotaWithCurrency } from '@/lib/currency'
+import {
+  formatBillingCurrencyFromUSD,
+  formatQuotaWithCurrency,
+  type CurrencyFormatOptions,
+} from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -93,21 +97,46 @@ export function CheckinCalendarCard({
   })
   /* eslint-enable @tanstack/query/exhaustive-deps */
 
+  const formatCheckinReward = useCallback(
+    (
+      amount: number | undefined,
+      quota: number | undefined,
+      options?: CurrencyFormatOptions
+    ) => {
+      if (amount !== undefined) {
+        return formatBillingCurrencyFromUSD(amount, options)
+      }
+
+      return formatQuotaWithCurrency(quota ?? 0, options)
+    },
+    []
+  )
+
   const checkinRecordsMap = useMemo(() => {
-    const map: Record<string, number> = {}
+    const map: Record<string, CheckinRecord> = {}
     const records = checkinData?.stats?.records || []
     records.forEach((record: CheckinRecord) => {
-      map[record.checkin_date] = record.quota_awarded
+      map[record.checkin_date] = record
     })
     return map
   }, [checkinData?.stats?.records])
 
-  const monthlyQuota = useMemo(() => {
+  const monthlyReward = useMemo(() => {
     const records = checkinData?.stats?.records || []
-    return records.reduce(
-      (sum: number, record: CheckinRecord) => sum + (record.quota_awarded || 0),
+    const quota = records.reduce(
+      (sum: number, record: CheckinRecord) => sum + (record.quota_awarded ?? 0),
       0
     )
+    const amount = records.reduce(
+      (sum: number, record: CheckinRecord) =>
+        sum + (record.quota_awarded_amount ?? 0),
+      0
+    )
+    const hasAmount = records.some(
+      (record: CheckinRecord) => record.quota_awarded_amount !== undefined
+    )
+
+    return { amount: hasAmount ? amount : undefined, quota }
   }, [checkinData?.stats?.records])
 
   const todayString = useMemo(() => {
@@ -116,7 +145,7 @@ export function CheckinCalendarCard({
   }, [])
 
   const checkedToday = checkinData?.stats?.checked_in_today === true
-  const todayAward = checkinRecordsMap[todayString]
+  const todayRecord = checkinRecordsMap[todayString]
 
   useEffect(() => {
     if (initialLoaded) return
@@ -142,7 +171,10 @@ export function CheckinCalendarCard({
         const res = await performCheckin(token)
         if (res.success && res.data) {
           toast.success(
-            `${t('Check-in successful! Received')} ${formatQuotaWithCurrency(res.data.quota_awarded)}`
+            `${t('Check-in successful! Received')} ${formatCheckinReward(
+              res.data.quota_awarded_amount,
+              res.data.quota_awarded
+            )}`
           )
           refetch()
           setTurnstileModalVisible(false)
@@ -166,7 +198,7 @@ export function CheckinCalendarCard({
         setCheckinLoading(false)
       }
     },
-    [refetch, shouldTriggerTurnstile, t, turnstileSiteKey]
+    [formatCheckinReward, refetch, shouldTriggerTurnstile, t, turnstileSiteKey]
   )
 
   const handlePrevMonth = () => {
@@ -306,9 +338,12 @@ export function CheckinCalendarCard({
                   </span>
                 </div>
                 <p className='text-muted-foreground mt-1 line-clamp-2 text-xs sm:text-sm'>
-                  {checkedToday && todayAward !== undefined
-                    ? `${t('Today')} +${formatQuotaWithCurrency(todayAward)}`
-                    : t('Check in daily to receive random quota rewards')}
+                  {checkedToday && todayRecord !== undefined
+                    ? `${t('Today')} +${formatCheckinReward(
+                        todayRecord.quota_awarded_amount,
+                        todayRecord.quota_awarded
+                      )}`
+                    : t('Check in daily to receive random balance rewards')}
                 </p>
               </div>
             </button>
@@ -341,7 +376,11 @@ export function CheckinCalendarCard({
               </div>
               <div className='bg-card p-3 text-center sm:p-5'>
                 <div className='text-xl font-semibold tracking-tight tabular-nums sm:text-2xl'>
-                  {formatQuotaWithCurrency(monthlyQuota, { digitsLarge: 0 })}
+                  {formatCheckinReward(
+                    monthlyReward.amount,
+                    monthlyReward.quota,
+                    { digitsLarge: 0 }
+                  )}
                 </div>
                 <div className='text-muted-foreground mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-xs'>
                   {t('This month')}
@@ -349,11 +388,10 @@ export function CheckinCalendarCard({
               </div>
               <div className='bg-card p-3 text-center sm:p-5'>
                 <div className='text-xl font-semibold tracking-tight tabular-nums sm:text-2xl'>
-                  {formatQuotaWithCurrency(
+                  {formatCheckinReward(
+                    checkinData?.stats?.total_quota_amount,
                     checkinData?.stats?.total_quota || 0,
-                    {
-                      digitsLarge: 0,
-                    }
+                    { digitsLarge: 0 }
                   )}
                 </div>
                 <div className='text-muted-foreground mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-xs'>
@@ -410,8 +448,8 @@ export function CheckinCalendarCard({
                       dayObj.date.getDate()
                     ).padStart(2, '0')}`
                     const isToday = dateStr === todayString
-                    const quotaAwarded = checkinRecordsMap[dateStr]
-                    const isCheckedIn = quotaAwarded !== undefined
+                    const checkinRecord = checkinRecordsMap[dateStr]
+                    const isCheckedIn = checkinRecord !== undefined
                     const dayNum = dayObj.date.getDate()
 
                     const dayButton = (
@@ -443,7 +481,11 @@ export function CheckinCalendarCard({
                                 {t('Checked in')}
                               </div>
                               <div className='text-muted-foreground mt-0.5'>
-                                +{formatQuotaWithCurrency(quotaAwarded)}
+                                +
+                                {formatCheckinReward(
+                                  checkinRecord.quota_awarded_amount,
+                                  checkinRecord.quota_awarded
+                                )}
                               </div>
                             </div>
                           </TooltipContent>
@@ -463,7 +505,7 @@ export function CheckinCalendarCard({
                 <div className='bg-muted/30 text-muted-foreground rounded-lg border p-3 text-xs'>
                   <ul className='list-disc space-y-1 pl-5'>
                     <li>
-                      {t('Check in daily to receive random quota rewards')}
+                      {t('Check in daily to receive random balance rewards')}
                     </li>
                     <li>
                       {t('Rewards will be added directly to your balance')}

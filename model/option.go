@@ -185,6 +185,61 @@ func InitOptionMap() {
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
+	applyBillingOptionFallbacks()
+}
+
+func optionExistsInDatabase(key string) bool {
+	var count int64
+	if err := DB.Model(&Option{}).Where(commonKeyCol+" = ?", key).Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
+}
+
+func applyBillingOptionFallbacks() {
+	inviterAmountExists := optionExistsInDatabase("quota_setting.inviter_registration_reward_amount")
+	inviteeAmountExists := optionExistsInDatabase("quota_setting.invitee_registration_reward_amount")
+	checkinMinAmountExists := optionExistsInDatabase("checkin_setting.min_amount")
+	checkinMaxAmountExists := optionExistsInDatabase("checkin_setting.max_amount")
+
+	common.OptionMapRWMutex.Lock()
+	defer common.OptionMapRWMutex.Unlock()
+
+	quotaSetting := operation_setting.GetQuotaSetting()
+	if inviterAmountExists {
+		common.QuotaForInviter = common.AmountToQuota(quotaSetting.InviterRegistrationRewardAmount)
+		common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
+	} else if common.QuotaForInviter > 0 {
+		amount := strconv.FormatFloat(common.QuotaToAmount(common.QuotaForInviter), 'f', -1, 64)
+		common.OptionMap["quota_setting.inviter_registration_reward_amount"] = amount
+		quotaSetting.InviterRegistrationRewardAmount = common.QuotaToAmount(common.QuotaForInviter)
+	}
+	if inviteeAmountExists {
+		common.QuotaForInvitee = common.AmountToQuota(quotaSetting.InviteeRegistrationRewardAmount)
+		common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	} else if common.QuotaForInvitee > 0 {
+		amount := strconv.FormatFloat(common.QuotaToAmount(common.QuotaForInvitee), 'f', -1, 64)
+		common.OptionMap["quota_setting.invitee_registration_reward_amount"] = amount
+		quotaSetting.InviteeRegistrationRewardAmount = common.QuotaToAmount(common.QuotaForInvitee)
+	}
+
+	checkinSetting := operation_setting.GetCheckinSetting()
+	if checkinMinAmountExists {
+		checkinSetting.MinQuota = common.AmountToQuota(checkinSetting.MinAmount)
+		common.OptionMap["checkin_setting.min_quota"] = strconv.Itoa(checkinSetting.MinQuota)
+	} else if checkinSetting.MinQuota > 0 {
+		amount := strconv.FormatFloat(common.QuotaToAmount(checkinSetting.MinQuota), 'f', -1, 64)
+		common.OptionMap["checkin_setting.min_amount"] = amount
+		checkinSetting.MinAmount = common.QuotaToAmount(checkinSetting.MinQuota)
+	}
+	if checkinMaxAmountExists {
+		checkinSetting.MaxQuota = common.AmountToQuota(checkinSetting.MaxAmount)
+		common.OptionMap["checkin_setting.max_quota"] = strconv.Itoa(checkinSetting.MaxQuota)
+	} else if checkinSetting.MaxQuota > 0 {
+		amount := strconv.FormatFloat(common.QuotaToAmount(checkinSetting.MaxQuota), 'f', -1, 64)
+		common.OptionMap["checkin_setting.max_amount"] = amount
+		checkinSetting.MaxAmount = common.QuotaToAmount(checkinSetting.MaxQuota)
+	}
 }
 
 func loadOptionsFromDatabase() {

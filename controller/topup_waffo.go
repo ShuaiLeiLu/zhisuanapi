@@ -101,7 +101,7 @@ type WaffoPayRequest struct {
 
 func RequestWaffoAmount(c *gin.Context) {
 	var req WaffoPayRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
@@ -136,7 +136,7 @@ func RequestWaffoPay(c *gin.Context) {
 	}
 
 	var req WaffoPayRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
@@ -207,14 +207,15 @@ func RequestWaffoPay(c *gin.Context) {
 
 	// 创建本地订单
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          amount,
-		Money:           payMoney,
-		TradeNo:         merchantOrderId,
-		PaymentMethod:   model.PaymentMethodWaffo,
-		PaymentProvider: model.PaymentProviderWaffo,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               amount,
+		Money:                payMoney,
+		OriginalPayAmountUSD: payMoney,
+		TradeNo:              merchantOrderId,
+		PaymentMethod:        model.PaymentMethodWaffo,
+		PaymentProvider:      model.PaymentProviderWaffo,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, merchantOrderId, req.Amount, err.Error()))

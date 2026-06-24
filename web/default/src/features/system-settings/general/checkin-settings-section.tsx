@@ -41,32 +41,46 @@ import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
-const schema = z.object({
-  enabled: z.boolean(),
-  minQuota: z.coerce.number().int().min(0),
-  maxQuota: z.coerce.number().int().min(0),
-})
+const createSchema = (t: (key: string) => string) =>
+  z
+    .object({
+      enabled: z.boolean(),
+      minAmount: z.coerce.number().min(0),
+      maxAmount: z.coerce.number().min(0),
+    })
+    .superRefine((values, ctx) => {
+      if (values.maxAmount < values.minAmount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maxAmount'],
+          message: t(
+            'Maximum check-in reward must be greater than or equal to the minimum reward'
+          ),
+        })
+      }
+    })
 
-type Values = z.infer<typeof schema>
+type Values = z.infer<ReturnType<typeof createSchema>>
 
 export function CheckinSettingsSection({
   defaultValues,
 }: {
   defaultValues: {
     enabled: boolean
-    minQuota: number
-    maxQuota: number
+    minAmount: number
+    maxAmount: number
   }
 }) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
+  const schema = createSchema(t)
 
   const form = useForm<Values>({
     resolver: zodResolver(schema) as unknown as Resolver<Values>,
     defaultValues: {
       enabled: defaultValues.enabled,
-      minQuota: defaultValues.minQuota,
-      maxQuota: defaultValues.maxQuota,
+      minAmount: defaultValues.minAmount,
+      maxAmount: defaultValues.maxAmount,
     },
   })
 
@@ -83,18 +97,27 @@ export function CheckinSettingsSection({
       })
     }
 
-    if (values.minQuota !== defaultValues.minQuota) {
-      updates.push({
-        key: 'checkin_setting.min_quota',
-        value: String(values.minQuota),
-      })
+    const minChanged = values.minAmount !== defaultValues.minAmount
+    const maxChanged = values.maxAmount !== defaultValues.maxAmount
+    const minUpdate = {
+      key: 'checkin_setting.min_amount',
+      value: String(values.minAmount),
+    }
+    const maxUpdate = {
+      key: 'checkin_setting.max_amount',
+      value: String(values.maxAmount),
     }
 
-    if (values.maxQuota !== defaultValues.maxQuota) {
-      updates.push({
-        key: 'checkin_setting.max_quota',
-        value: String(values.maxQuota),
-      })
+    if (minChanged && maxChanged) {
+      if (values.minAmount > defaultValues.maxAmount) {
+        updates.push(maxUpdate, minUpdate)
+      } else {
+        updates.push(minUpdate, maxUpdate)
+      }
+    } else if (minChanged) {
+      updates.push(minUpdate)
+    } else if (maxChanged) {
+      updates.push(maxUpdate)
     }
 
     if (updates.length === 0) {
@@ -128,7 +151,7 @@ export function CheckinSettingsSection({
                   <FormLabel>{t('Enable check-in feature')}</FormLabel>
                   <FormDescription>
                     {t(
-                      'Allow users to check in daily for random quota rewards'
+                      'Allow users to check in daily for random balance rewards'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>
@@ -147,20 +170,21 @@ export function CheckinSettingsSection({
             <div className='grid gap-6 sm:grid-cols-2'>
               <FormField
                 control={form.control}
-                name='minQuota'
+                name='minAmount'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Minimum check-in quota')}</FormLabel>
+                    <FormLabel>{t('Minimum check-in reward (USD)')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'
                         min={0}
-                        placeholder={t('1000')}
+                        step='0.01'
+                        placeholder='1'
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('Minimum quota amount awarded for check-in')}
+                      {t('Minimum USD amount awarded for check-in')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -169,20 +193,21 @@ export function CheckinSettingsSection({
 
               <FormField
                 control={form.control}
-                name='maxQuota'
+                name='maxAmount'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Maximum check-in quota')}</FormLabel>
+                    <FormLabel>{t('Maximum check-in reward (USD)')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'
                         min={0}
-                        placeholder={t('10000')}
+                        step='0.01'
+                        placeholder='10'
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('Maximum quota amount awarded for check-in')}
+                      {t('Maximum USD amount awarded for check-in')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

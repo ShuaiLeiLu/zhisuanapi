@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -57,7 +58,20 @@ export function AffiliateRewardsCard({
     )
   }
 
-  const hasRewards = (user?.aff_quota ?? 0) > 0
+  const pendingRewardAmount = user?.aff_quota_amount
+  const totalRewardAmount = user?.aff_history_quota_amount
+  const hasRewards =
+    pendingRewardAmount !== undefined
+      ? pendingRewardAmount > 0
+      : (user?.aff_quota ?? 0) > 0
+  const pendingRewardDisplay =
+    pendingRewardAmount !== undefined
+      ? formatBillingCurrencyFromUSD(pendingRewardAmount)
+      : formatQuota(user?.aff_quota ?? 0)
+  const totalRewardDisplay =
+    totalRewardAmount !== undefined
+      ? formatBillingCurrencyFromUSD(totalRewardAmount)
+      : formatQuota(user?.aff_history_quota ?? 0)
 
   return (
     <Card data-card-hover='false' className='bg-muted/20 py-0'>
@@ -78,11 +92,12 @@ export function AffiliateRewardsCard({
           </div>
         </div>
 
-        <div className='grid grid-cols-3 gap-1.5 text-center'>
+        <div className='grid grid-cols-4 gap-1.5 text-center'>
           {[
-            [t('Pending'), formatQuota(user?.aff_quota ?? 0)],
-            [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
+            [t('Pending Amount'), pendingRewardDisplay],
+            [t('Total Earned Amount'), totalRewardDisplay],
             [t('Invites'), String(user?.aff_count ?? 0)],
+            [t('Rebate Count'), String(user?.aff_rebate_count ?? 0)],
           ].map(([label, value]) => (
             <div key={label}>
               <div className='text-muted-foreground truncate text-[10px] font-medium tracking-wider uppercase'>

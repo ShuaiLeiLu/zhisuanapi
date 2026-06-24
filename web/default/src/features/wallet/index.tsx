@@ -84,6 +84,14 @@ export function Wallet(props: WalletProps) {
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+  const availableRewardAmount = useMemo(() => {
+    if (user?.aff_quota_amount !== undefined) {
+      return user.aff_quota_amount
+    }
+
+    const quotaPerUnit = currency?.quotaPerUnit || 500000
+    return (user?.aff_quota ?? 0) / quotaPerUnit
+  }, [currency?.quotaPerUnit, user?.aff_quota, user?.aff_quota_amount])
   const {
     amount: paymentAmount,
     calculating,
@@ -94,7 +102,7 @@ export function Wallet(props: WalletProps) {
   const {
     affiliateLink,
     loading: affiliateLoading,
-    transferQuota,
+    transferRewardAmount,
     transferring,
   } = useAffiliate()
   const { redeeming, redeemCode } = useRedemption()
@@ -209,7 +217,7 @@ export function Wallet(props: WalletProps) {
 
   // Handle transfer
   const handleTransfer = async (amount: number) => {
-    const success = await transferQuota(amount)
+    const success = await transferRewardAmount(amount)
     if (success) {
       await fetchUser()
     }
@@ -344,7 +352,7 @@ export function Wallet(props: WalletProps) {
         open={transferDialogOpen}
         onOpenChange={setTransferDialogOpen}
         onConfirm={handleTransfer}
-        availableQuota={user?.aff_quota ?? 0}
+        availableAmount={availableRewardAmount}
         transferring={transferring}
       />
 

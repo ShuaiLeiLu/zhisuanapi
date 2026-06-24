@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { type ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatQuota, formatTimestamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -274,6 +275,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
         const user = row.original
         const affCount = user.aff_count || 0
         const affHistoryQuota = user.aff_history_quota || 0
+        const affHistoryAmount = user.aff_history_quota_amount
+        const affHistoryDisplay =
+          affHistoryAmount !== undefined
+            ? formatBillingCurrencyFromUSD(affHistoryAmount)
+            : formatQuota(affHistoryQuota)
         const inviterId = user.inviter_id || 0
 
         return (
@@ -297,7 +303,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
               <TooltipTrigger
                 render={
                   <StatusBadge
-                    label={`${t('Revenue')}: ${formatQuota(affHistoryQuota)}`}
+                    label={`${t('Revenue')}: ${affHistoryDisplay}`}
                     variant='neutral'
                     copyable={false}
                     className='cursor-help'

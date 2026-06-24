@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -31,14 +30,17 @@ func GetCheckinStatus(c *gin.Context) {
 		})
 		return
 	}
+	minAmount, maxAmount := setting.GetAmountRange()
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"enabled":   setting.Enabled,
-			"min_quota": setting.MinQuota,
-			"max_quota": setting.MaxQuota,
-			"stats":     stats,
+			"enabled":    setting.Enabled,
+			"min_quota":  setting.MinQuota,
+			"max_quota":  setting.MaxQuota,
+			"min_amount": minAmount,
+			"max_amount": maxAmount,
+			"stats":      stats,
 		},
 	})
 }
@@ -61,12 +63,13 @@ func DoCheckin(c *gin.Context) {
 		})
 		return
 	}
-	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("用户签到，获得额度 %s", logger.LogQuota(checkin.QuotaAwarded)))
+	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("用户签到，获得奖励 $%.2f", checkin.QuotaAwardedAmount))
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "签到成功",
 		"data": gin.H{
-			"quota_awarded": checkin.QuotaAwarded,
-			"checkin_date":  checkin.CheckinDate},
+			"quota_awarded":        checkin.QuotaAwarded,
+			"quota_awarded_amount": checkin.QuotaAwardedAmount,
+			"checkin_date":         checkin.CheckinDate},
 	})
 }

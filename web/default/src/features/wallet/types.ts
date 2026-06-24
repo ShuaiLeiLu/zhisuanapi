@@ -216,8 +216,10 @@ export interface AmountRequest {
  * Affiliate quota transfer request
  */
 export interface AffiliateTransferRequest {
-  /** Quota amount to transfer */
-  quota: number
+  /** USD reward amount to transfer */
+  amount?: number
+  /** Legacy quota amount to transfer */
+  quota?: number
 }
 
 /**
@@ -230,16 +232,24 @@ export interface UserWalletData {
   username: string
   /** Current quota balance */
   quota: number
+  /** Current balance amount in USD */
+  quota_amount?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
   request_count: number
   /** Affiliate quota (pending rewards) */
   aff_quota: number
+  /** Affiliate pending reward amount in USD */
+  aff_quota_amount?: number
   /** Total affiliate quota earned (historical) */
   aff_history_quota: number
+  /** Total affiliate reward amount earned in USD */
+  aff_history_quota_amount?: number
   /** Number of successful affiliate invites */
   aff_count: number
+  /** Number of successful top-up rebates */
+  aff_rebate_count?: number
   /** User group */
   group: string
 }

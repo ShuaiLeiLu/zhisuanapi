@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,7 +35,7 @@ func Login(c *gin.Context) {
 		return
 	}
 	var loginRequest LoginRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
+	err := common.DecodeJson(c.Request.Body, &loginRequest)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -183,7 +182,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -378,7 +377,8 @@ func GenerateAccessToken(c *gin.Context) {
 }
 
 type TransferAffQuotaRequest struct {
-	Quota int `json:"quota" binding:"required"`
+	Quota  int     `json:"quota"`
+	Amount float64 `json:"amount"`
 }
 
 func TransferAffQuota(c *gin.Context) {
@@ -393,11 +393,17 @@ func TransferAffQuota(c *gin.Context) {
 		return
 	}
 	tran := TransferAffQuotaRequest{}
-	if err := c.ShouldBindJSON(&tran); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &tran); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	err = user.TransferAffQuotaToQuota(tran.Quota)
+	if tran.Amount > 0 {
+		err = user.TransferAffAmountToQuota(tran.Amount)
+	} else if tran.Quota > 0 {
+		err = user.TransferAffQuotaToQuota(tran.Quota)
+	} else {
+		err = errors.New("转移金额必须大于 0")
+	}
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserTransferFailed, map[string]any{"Error": err.Error()})
 		return
@@ -449,31 +455,35 @@ func GetSelf(c *gin.Context) {
 
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,                // 新增权限字段
+		"id":                       user.Id,
+		"username":                 user.Username,
+		"display_name":             user.DisplayName,
+		"role":                     user.Role,
+		"status":                   user.Status,
+		"email":                    user.Email,
+		"github_id":                user.GitHubId,
+		"discord_id":               user.DiscordId,
+		"oidc_id":                  user.OidcId,
+		"wechat_id":                user.WeChatId,
+		"telegram_id":              user.TelegramId,
+		"group":                    user.Group,
+		"quota":                    user.Quota,
+		"used_quota":               user.UsedQuota,
+		"request_count":            user.RequestCount,
+		"aff_code":                 user.AffCode,
+		"aff_count":                user.AffCount,
+		"aff_rebate_count":         user.AffRebateCount,
+		"aff_quota":                user.AffQuota,
+		"aff_history_quota":        user.AffHistoryQuota,
+		"quota_amount":             common.QuotaToAmount(user.Quota),
+		"aff_quota_amount":         common.QuotaToAmount(user.AffQuota),
+		"aff_history_quota_amount": common.QuotaToAmount(user.AffHistoryQuota),
+		"inviter_id":               user.InviterId,
+		"linux_do_id":              user.LinuxDOId,
+		"setting":                  user.Setting,
+		"stripe_customer":          user.StripeCustomer,
+		"sidebar_modules":          userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":              permissions,                // 新增权限字段
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -565,7 +575,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	// 普通用户不包含admin区域
 
 	// 转换为JSON字符串
-	configBytes, err := json.Marshal(defaultConfig)
+	configBytes, err := common.Marshal(defaultConfig)
 	if err != nil {
 		common.SysLog("生成默认边栏配置失败: " + err.Error())
 		return ""
@@ -603,7 +613,7 @@ func GetUserModels(c *gin.Context) {
 
 func UpdateUser(c *gin.Context) {
 	var updatedUser model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)
+	err := common.DecodeJson(c.Request.Body, &updatedUser)
 	if err != nil || updatedUser.Id == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -691,7 +701,7 @@ func AdminClearUserBinding(c *gin.Context) {
 
 func UpdateSelf(c *gin.Context) {
 	var requestData map[string]interface{}
-	err := json.NewDecoder(c.Request.Body).Decode(&requestData)
+	err := common.DecodeJson(c.Request.Body, &requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -755,12 +765,12 @@ func UpdateSelf(c *gin.Context) {
 
 	// 原有的用户信息更新逻辑
 	var user model.User
-	requestDataBytes, err := json.Marshal(requestData)
+	requestDataBytes, err := common.Marshal(requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	err = json.Unmarshal(requestDataBytes, &user)
+	err = common.Unmarshal(requestDataBytes, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -876,7 +886,7 @@ func DeleteSelf(c *gin.Context) {
 
 func CreateUser(c *gin.Context) {
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	user.Username = strings.TrimSpace(user.Username)
 	if err != nil || user.Username == "" || user.Password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -927,7 +937,7 @@ type ManageRequest struct {
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -1173,7 +1183,7 @@ func TopUp(c *gin.Context) {
 	}
 	defer lock.Unlock()
 	req := topUpRequest{}
-	err := c.ShouldBindJSON(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -1211,7 +1221,7 @@ type UpdateUserSettingRequest struct {
 
 func UpdateUserSetting(c *gin.Context) {
 	var req UpdateUserSettingRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}

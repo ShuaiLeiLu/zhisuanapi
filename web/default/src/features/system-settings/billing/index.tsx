@@ -32,6 +32,11 @@ const defaultBillingSettings: BillingSettings = {
   TopUpLink: '',
   'general_setting.docs_link': '',
   'quota_setting.enable_free_model_pre_consume': true,
+  'quota_setting.affiliate_reward_trigger': 'registration',
+  'quota_setting.inviter_registration_reward_amount': 0,
+  'quota_setting.invitee_registration_reward_amount': 0,
+  'quota_setting.inviter_topup_rebate_percent': 0,
+  'quota_setting.invitee_topup_rebate_percent': 0,
   QuotaPerUnit: 500000,
   USDExchangeRate: 7,
   'general_setting.quota_display_type': 'USD',
@@ -105,6 +110,8 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.enabled': false,
   'checkin_setting.min_quota': 1000,
   'checkin_setting.max_quota': 10000,
+  'checkin_setting.min_amount': 0,
+  'checkin_setting.max_amount': 0,
 }
 
 export function BillingSettings() {

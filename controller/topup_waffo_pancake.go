@@ -24,7 +24,7 @@ type WaffoPancakePayRequest struct {
 
 func RequestWaffoPancakeAmount(c *gin.Context) {
 	var req WaffoPancakePayRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
@@ -121,7 +121,7 @@ type createWaffoPancakePairRequest struct {
 // Catalog / pair endpoints are transient — only this one writes the OptionMap.
 func SaveWaffoPancake(c *gin.Context) {
 	var req saveWaffoPancakeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
@@ -168,7 +168,7 @@ func resolveWaffoPancakeAdminCreds(bodyMerchantID, bodyPrivateKey string) (strin
 func CreateWaffoPancakePair(c *gin.Context) {
 	var req createWaffoPancakePairRequest
 	if c.Request.ContentLength > 0 {
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 			return
 		}
@@ -249,7 +249,7 @@ type createWaffoPancakeSubscriptionProductRequest struct {
 func CreateWaffoPancakeSubscriptionProduct(c *gin.Context) {
 	var req createWaffoPancakeSubscriptionProductRequest
 	if c.Request.ContentLength > 0 {
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 			return
 		}
@@ -343,7 +343,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 	}
 
 	var req WaffoPancakePayRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
@@ -373,14 +373,15 @@ func RequestWaffoPancakePay(c *gin.Context) {
 
 	tradeNo := fmt.Sprintf("WAFFO_PANCAKE-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          normalizeWaffoPancakeTopUpAmount(req.Amount),
-		Money:           payMoney,
-		TradeNo:         tradeNo,
-		PaymentMethod:   model.PaymentMethodWaffoPancake,
-		PaymentProvider: model.PaymentProviderWaffoPancake,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               normalizeWaffoPancakeTopUpAmount(req.Amount),
+		Money:                payMoney,
+		OriginalPayAmountUSD: payMoney,
+		TradeNo:              tradeNo,
+		PaymentMethod:        model.PaymentMethodWaffoPancake,
+		PaymentProvider:      model.PaymentProviderWaffoPancake,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo Pancake 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
